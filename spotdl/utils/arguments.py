@@ -627,6 +627,14 @@ def parse_output_options(parser: _ArgumentGroup):
         help="Remove lrc files when using sync operation when downloading songs",
     )
 
+    # Prefer extended mixes
+    parser.add_argument(
+        "--prefer-extended-mixes",
+        action="store_const",
+        const=True,
+        help="Prefer extended mixes when downloading songs. ",
+    )
+
 
 def parse_web_options(parser: _ArgumentGroup):
     """

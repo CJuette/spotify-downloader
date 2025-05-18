@@ -353,6 +353,7 @@ DOWNLOADER_OPTIONS: DownloaderOptions = {
     "create_skip_file": False,
     "respect_skip_file": False,
     "sync_remove_lrc": False,
+    "prefer_extended_mixes": False,
 }
 
 WEB_OPTIONS: WebOptions = {
