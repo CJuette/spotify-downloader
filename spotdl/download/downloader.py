@@ -44,6 +44,7 @@ from spotdl.utils.lrc import generate_lrc
 from spotdl.utils.m3u import gen_m3u_files
 from spotdl.utils.metadata import MetadataError, embed_metadata
 from spotdl.utils.search import gather_known_songs, reinit_song, songs_from_albums
+from spotdl.utils.matchers import StandardMatcher, ExtendedMixMatcher
 
 __all__ = [
     "AUDIO_PROVIDERS",
@@ -201,6 +202,10 @@ class Downloader:
             audio_class = AUDIO_PROVIDERS.get(audio_provider)
             if audio_class is None:
                 raise DownloaderError(f"Invalid audio provider: {audio_provider}")
+            
+            matcher_class = StandardMatcher
+            if self.settings["prefer_extended_mixes"]:
+                result_discriminator_class = ExtendedMixMatcher
 
             self.audio_providers.append(
                 audio_class(
@@ -209,6 +214,7 @@ class Downloader:
                     search_query=self.settings["search_query"],
                     filter_results=self.settings["filter_results"],
                     yt_dlp_args=self.settings["yt_dlp_args"],
+                    matcher=matcher_class
                 )
             )
 

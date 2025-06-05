@@ -17,7 +17,7 @@ from spotdl.utils.formatter import (
     create_search_query,
     create_song_title,
 )
-from spotdl.utils.matching import get_best_matches, order_results
+from spotdl.utils.matchers import Matcher, StandardMatcher
 
 __all__ = ["AudioProviderError", "AudioProvider", "ISRC_REGEX", "YTDLLogger"]
 
@@ -59,7 +59,6 @@ class YTDLLogger:
 
 ISRC_REGEX = re.compile(r"^[A-Z]{2}-?\w{3}-?\d{2}-?\d{5}$")
 
-
 class AudioProvider:
     """
     Base class for all other providers. Provides some common functionality.
@@ -76,6 +75,7 @@ class AudioProvider:
         search_query: Optional[str] = None,
         filter_results: bool = True,
         yt_dlp_args: Optional[str] = None,
+        matcher = StandardMatcher
     ) -> None:
         """
         Base class for audio providers.
@@ -92,6 +92,7 @@ class AudioProvider:
         self.cookie_file = cookie_file
         self.search_query = search_query
         self.filter_results = filter_results
+        self.matcher = matcher()
 
         if self.output_format == "m4a":
             ytdl_format = "bestaudio[ext=m4a]/bestaudio/best"
@@ -201,7 +202,7 @@ class AudioProvider:
                 return isrc_results[0].url
 
             if len(isrc_results) > 0:
-                sorted_isrc_results = order_results(
+                sorted_isrc_results = self.matcher.order_results(
                     isrc_results, song, self.search_query
                 )
 
@@ -268,7 +269,7 @@ class AudioProvider:
 
             if self.filter_results:
                 # Order results
-                new_results = order_results(search_results, song, self.search_query)
+                new_results = self.matcher.order_results(search_results, song, self.search_query)
             else:
                 new_results = {}
                 if len(search_results) > 0:
@@ -281,7 +282,7 @@ class AudioProvider:
             # we are almost 100% sure that this is the correct link
             if len(new_results) != 0:
                 # get the result with highest score
-                best_result, best_score = self.get_best_result(new_results)
+                best_result, best_score = self.matcher.get_best_result(new_results)
                 logger.debug(
                     "[%s] Best result is %s with score %s",
                     song.song_id,
@@ -308,7 +309,7 @@ class AudioProvider:
             return None
 
         # get the result with highest score
-        best_result, best_score = self.get_best_result(results)
+        best_result, best_score = self.matcher.get_best_result(results)
         logger.debug(
             "[%s] Returning best result %s with score %s",
             song.song_id,
@@ -317,63 +318,6 @@ class AudioProvider:
         )
 
         return best_result.url
-
-    def get_best_result(self, results: Dict[Result, float]) -> Tuple[Result, float]:
-        """
-        Get the best match from the results
-        using views and average match
-
-        ### Arguments
-        - results: A dictionary of results and their scores
-
-        ### Returns
-        - The best match URL and its score
-        """
-
-        best_results = get_best_matches(results, 8)
-
-        # If we have only one result, return it
-        if len(best_results) == 1:
-            return best_results[0][0], best_results[0][1]
-
-        # Initial best result based on the average match
-        best_result = best_results[0]
-
-        # If the best result has a score higher than 80%
-        # and it's a isrc search, return it
-        if best_result[1] > 80 and best_result[0].isrc_search:
-            return best_result[0], best_result[1]
-
-        # If we have more than one result,
-        # return the one with the highest score
-        # and most views
-        if len(best_results) > 1:
-            views: List[int] = []
-            for best_result in best_results:
-                if best_result[0].views:
-                    views.append(best_result[0].views)
-                else:
-                    views.append(self.get_views(best_result[0].url))
-
-            highest_views = max(views)
-            lowest_views = min(views)
-
-            if highest_views in (0, lowest_views):
-                return best_result[0], best_result[1]
-
-            weighted_results: List[Tuple[Result, float]] = []
-            for index, best_result in enumerate(best_results):
-                result_views = views[index]
-                views_score = (
-                    (result_views - lowest_views) / (highest_views - lowest_views)
-                ) * 15
-                score = min(best_result[1] + views_score, 100)
-                weighted_results.append((best_result[0], score))
-
-            # Now we return the result with the highest score
-            return max(weighted_results, key=lambda x: x[1])
-
-        return best_result[0], best_result[1]
 
     def get_download_metadata(self, url: str, download: bool = False) -> Dict:
         """
