@@ -41,6 +41,26 @@ class Matcher:
     def get_best_result(self, results: Dict[Result, float]) -> Tuple[Result, float]:
         # not implemented in base class
         raise NotImplementedError
+    
+    def order_results(
+        self,
+        results: List[Result],
+        song: Song,
+        search_query: Optional[str] = None,
+    ) -> Dict[Result, float]:
+        """
+        Order results.
+
+        ### Arguments
+        - results: The results to order.
+        - song: The song to order for.
+        - search_query: The search query.
+
+        ### Returns
+        - The ordered results, with scores.
+        """
+        # not implemented in base class
+        raise NotImplementedError
 
 class StandardMatcher(Matcher):
     """
@@ -123,7 +143,7 @@ class StandardMatcher(Matcher):
         - search_query: The search query.
 
         ### Returns
-        - The ordered results.
+        - The ordered results, with scores.
         """
 
         # Assign an overall avg match value to each result
