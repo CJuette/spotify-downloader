@@ -327,7 +327,7 @@ class StandardMatcher(Matcher):
 
         return links_with_match_value
     
-class ExtendedMixMatcher(Matcher):
+class ExtendedMixMatcher(StandardMatcher):
     """
     Extended Mix implementation of the result discriminator.
     This is the default implementation.
