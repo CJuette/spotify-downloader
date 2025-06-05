@@ -205,7 +205,11 @@ class Downloader:
             
             matcher_class = StandardMatcher
             if self.settings["prefer_extended_mixes"]:
-                result_discriminator_class = ExtendedMixMatcher
+                logger.debug(
+                    "Using ExtendedMixMatcher for audio provider: %s",
+                    audio_provider,
+                )
+                matcher_class = ExtendedMixMatcher
 
             self.audio_providers.append(
                 audio_class(
