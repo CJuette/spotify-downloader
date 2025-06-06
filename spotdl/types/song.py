@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from rapidfuzz import fuzz
 
+from spotdl.types.result import Result
 from spotdl.utils.spotify import SpotifyClient
 
 __all__ = ["Song", "SongList", "SongError"]
@@ -155,6 +156,26 @@ class Song:
             raise SongError(f"Spotipy error, no response: {search_term}")
 
         return raw_search_results
+    
+    def update_from_result(self, result: Result):
+        """
+        Updates the Song object with data from a search result.
+
+        ### Arguments
+        - result: The search result to update from.
+        """
+        self.name = result.name
+        self.url = result.url
+        self.artist = str(result.artists)
+        self.artists = list(result.artists) if result.artists is not None else []
+        self.duration = int(result.duration)
+        self.explicit = result.explicit if result.explicit is not None else self.explicit
+        self.album_name = result.album if result.album is not None else self.album_name
+        self.year = result.year if result.year is not None else self.year
+        self.track_number = result.track_number if result.track_number is not None else self.track_number
+        self.lyrics = result.lyrics if result.lyrics is not None else self.lyrics
+        self.genres = [result.genre] if result.genre is not None else self.genres
+        self.isrc = result.result_id if getattr(result, 'isrc_search', False) else self.isrc
 
     @classmethod
     def from_search_term(cls, search_term: str) -> "Song":

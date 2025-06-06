@@ -28,6 +28,7 @@ from spotdl.providers.audio import (
 )
 from spotdl.providers.lyrics import AzLyrics, Genius, LyricsProvider, MusixMatch, Synced
 from spotdl.types.options import DownloaderOptionalOptions, DownloaderOptions
+from spotdl.types.result import Result
 from spotdl.types.song import Song
 from spotdl.utils.archive import Archive
 from spotdl.utils.config import (
@@ -299,6 +300,21 @@ class Downloader:
             songs = [song for song in songs if song.url not in self.url_archive]
             logger.debug("Filtered %d songs with archive", len(songs))
 
+        if self.settings["prefer_extended_mixes"]:
+            # Remove terms like "Radio Edit", "Radio Version", "Radio Mix" from song names.
+            # We also need to remove ISRCs from the one with these terms in the title.
+            for song in songs:
+                # Compile the regex once for efficiency
+                radio_edit_regex = re.compile(r"(\s*[-(]\s*Radio (?:Edit|Mix|Version)\s*[)]?)")
+
+                if song.isrc and radio_edit_regex.search(song.name):
+                    # Remove ISRCs from songs with "Radio Edit" in the title
+                    song.isrc = None
+
+                # Remove "Radio Edit" from the song name
+                song.name = radio_edit_regex.sub("", song.name).strip()
+                
+
         self.progress_handler.set_song_count(len(songs))
 
         # Create tasks list
@@ -384,7 +400,7 @@ class Downloader:
         async with self.semaphore:
             return await self.loop.run_in_executor(None, self.search_and_download, song)
 
-    def search(self, song: Song) -> str:
+    def search(self, song: Song) -> Result:
         """
         Search for a song using all available providers.
 
@@ -396,9 +412,9 @@ class Downloader:
         """
 
         for audio_provider in self.audio_providers:
-            url = audio_provider.search(song, self.settings["only_verified_results"])
-            if url:
-                return url
+            result = audio_provider.search(song, self.settings["only_verified_results"])
+            if result:
+                return result
 
             logger.debug("%s failed to find %s", audio_provider.name, song.display_name)
 
@@ -674,7 +690,19 @@ class Downloader:
             # Create the output directory if it doesn't exist
             output_file.parent.mkdir(parents=True, exist_ok=True)
             if song.download_url is None:
-                download_url = self.search(song)
+                search_result = self.search(song)
+                download_url = search_result.url
+
+                # Update metadata with the search result
+                song.update_from_result(search_result)
+
+                output_file = create_file_name(
+                    song=song,
+                    template=self.settings["output"],
+                    file_extension=self.settings["format"],
+                    restrict=self.settings["restrict"],
+                    file_name_length=self.settings["max_filename_length"],
+                )
             else:
                 download_url = song.download_url
 
