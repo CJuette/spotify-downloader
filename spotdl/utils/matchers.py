@@ -531,4 +531,24 @@ class ExtendedMixMatcher(StandardMatcher):
             # the results along with the avg Match
             links_with_match_value[result] = average_match
 
+        self.compare_with_standard(links_with_match_value, song, search_query)
         return links_with_match_value
+    
+    
+    def compare_with_standard(self, results_extended: Dict[Result, float], song: Song, search_query: Optional[str] = None):
+        """
+        Compares the best result from ExtendedMixMatcher and StandardMatcher get_best_result.
+        Prints a message if the best result is different.
+        """
+        # Get ordered results from both matchers
+        extended_results = results_extended
+        standard_results = super().order_results(list(results_extended.keys()), song, search_query)
+
+        # Use get_best_result to get the best result and score from each matcher
+        best_extended, score_extended = self.get_best_result(extended_results) if extended_results else (None, None)
+        best_standard, score_standard = super().get_best_result(standard_results) if standard_results else (None, None)
+
+        if best_extended != best_standard:
+            print(f"[ExtendedMixMatcher] Best result differs from StandardMatcher:\n"
+                  f"  ExtendedMixMatcher: artist={getattr(best_extended, 'artist', None)}, name={getattr(best_extended, 'name', None)} (score: {score_extended})\n"
+                  f"  StandardMatcher: artist={getattr(best_standard, 'artist', None)}, name={getattr(best_standard, 'name', None)} (score: {score_standard})")
