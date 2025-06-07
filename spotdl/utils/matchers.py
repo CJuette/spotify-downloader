@@ -105,8 +105,6 @@ class StandardMatcher(Matcher):
             for best_result in best_results:
                 if best_result[0].views:
                     views.append(best_result[0].views)
-                else:
-                    views.append(self.get_views(best_result[0].url))
 
             highest_views = max(views)
             lowest_views = min(views)
