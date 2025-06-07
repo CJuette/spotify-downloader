@@ -352,6 +352,9 @@ class ExtendedMixMatcher(StandardMatcher):
         - The ordered results, with scores.
         """
 
+        # Extended Mix Matcher doesn't work well currently, so using the StandardMatcher's order_results for now
+        return super().order_results(results, song, search_query)
+
         # Assign an overall avg match value to each result
         links_with_match_value = {}
 
