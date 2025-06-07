@@ -509,9 +509,20 @@ class Downloader:
         """
 
         for audio_provider in self.audio_providers:
-            result = audio_provider.search(song, self.settings["only_verified_results"])
-            if result:
-                return result
+            try: 
+                result = audio_provider.search(song, self.settings["only_verified_results"])
+                if result:
+                    return result
+            except Exception as exc:
+                logger.error(
+                    "Error while searching for %s on %s: %s",
+                    song.display_name,
+                    audio_provider.name,
+                    exc,
+                )
+                self.errors.append(
+                    f"Error while searching for {song.display_name} on {audio_provider.name}: {exc}"
+                )
 
             logger.debug("%s failed to find %s", audio_provider.name, song.display_name)
 
