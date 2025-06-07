@@ -356,8 +356,8 @@ class Downloader:
             original_song.isrc != new_song.isrc
             or original_song.name != new_song.name
         ):
-            logger.info(
-                "[Prefer Extended] Found alternative version for '%s': '%s - %s' (ISRC: %s)",
+            logger.warning(
+                "[Prefer Extended] Found alternative version for \"%s\": \"%s - %s\" (ISRC: %s)",
                 original_song.display_name,
                 new_song.artist,
                 new_song.name,

@@ -333,7 +333,7 @@ class ExtendedMixMatcher(StandardMatcher):
 
     def __init__(self):
         super().__init__()
-
+ 
     def order_results(
         self,
         results: List[Result],
@@ -437,10 +437,6 @@ class ExtendedMixMatcher(StandardMatcher):
             album_match = calc_album_match(song, result)
             debug(song.song_id, result.result_id, f"Final album match: {album_match}")
 
-            # Calculate time match
-            time_match = calc_time_match(song, result)
-            debug(song.song_id, result.result_id, f"Final time match: {time_match}")
-
             # Ignore results with name match lower than 60%
             if name_match <= 60:
                 debug(
@@ -478,8 +474,9 @@ class ExtendedMixMatcher(StandardMatcher):
                     f"Average match /w album match: {average_match}",
                 )
 
-            # Skip results with time match lower than 25%
-            if time_match < 25:
+            # Skip results that are shorter than the original track
+            time_diff = abs(song.duration - result.duration)
+            if time_diff < 0:
                 debug(
                     song.song_id,
                     result.result_id,
@@ -487,10 +484,8 @@ class ExtendedMixMatcher(StandardMatcher):
                 )
                 continue
 
-            # If the time match is lower than 50%
-            # and the average match is lower than 75%
-            # we skip the result
-            if time_match < 50 and average_match < 75:
+            # Also skip results that are much longer than the original track (>10 min more)
+            if time_diff > 600 and average_match < 75:
                 debug(
                     song.song_id,
                     result.result_id,
@@ -501,13 +496,7 @@ class ExtendedMixMatcher(StandardMatcher):
             if (
                 (not result.isrc_search and average_match <= 85)
                 or result.source == "slider.kz"
-                or time_match < 0
             ):
-                # Don't add time to avg match if average match is not the best
-                # (lower than 85%), always include time match if result is from
-                # slider.kz or if time match is lower than 0
-                average_match = (average_match + time_match) / 2
-
                 debug(
                     song.song_id,
                     result.result_id,
@@ -531,6 +520,38 @@ class ExtendedMixMatcher(StandardMatcher):
             # the results along with the avg Match
             links_with_match_value[result] = average_match
 
+        # If we have more than one result, prefer by score, views, and duration (favoring extended versions)
+        if len(links_with_match_value) > 1:
+            results_list = list(links_with_match_value.items())
+            durations: List[float] = []
+            for result, _ in results_list:
+                # Get duration
+                if hasattr(result, "duration") and result.duration:
+                    durations.append(result.duration)
+
+            longest_duration = max(durations)
+            shortest_duration = min(durations)
+
+            weighted_results: List[Tuple[Result, float]] = []
+            for idx, (result, avg_score) in enumerate(results_list):
+                result_duration = durations[idx]
+                duration_score = (
+                    (result_duration - shortest_duration)
+                    / ((longest_duration - shortest_duration) + 1e-6)
+                ) * 100
+                score_weight = 1.0
+                duration_weight = 0.2
+                score = (
+                    avg_score * score_weight
+                    + duration_score * duration_weight
+                ) / (score_weight + duration_weight)
+                weighted_results.append((result, score))
+
+            # Sort by weighted score descending
+            weighted_results.sort(key=lambda x: x[1], reverse=True)
+            # Rebuild links_with_match_value with new scores
+            links_with_match_value = {r: s for r, s in weighted_results}
+
         self.compare_with_standard(links_with_match_value, song, search_query)
         return links_with_match_value
     
@@ -549,6 +570,6 @@ class ExtendedMixMatcher(StandardMatcher):
         best_standard, score_standard = super().get_best_result(standard_results) if standard_results else (None, None)
 
         if best_extended != best_standard:
-            logging.info(f"[ExtendedMixMatcher] Best result differs from StandardMatcher:\n"
+            logger.warning(f"[ExtendedMixMatcher] Best result differs from StandardMatcher:\n"
                   f"  ExtendedMixMatcher: artist={getattr(best_extended, 'artist', None)}, name={getattr(best_extended, 'name', None)} (score: {score_extended})\n"
                   f"  StandardMatcher: artist={getattr(best_standard, 'artist', None)}, name={getattr(best_standard, 'name', None)} (score: {score_standard})")
