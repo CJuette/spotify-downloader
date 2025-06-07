@@ -3,6 +3,7 @@ Downloader module, this is where all the downloading pre/post processing happens
 """
 
 import asyncio
+import copy
 import datetime
 import json
 import logging
@@ -46,6 +47,7 @@ from spotdl.utils.m3u import gen_m3u_files
 from spotdl.utils.metadata import MetadataError, embed_metadata
 from spotdl.utils.search import gather_known_songs, reinit_song, songs_from_albums
 from spotdl.utils.matchers import StandardMatcher, ExtendedMixMatcher
+from spotdl.utils.isrc import find_isrc_alternatives
 
 __all__ = [
     "AUDIO_PROVIDERS",
@@ -83,6 +85,9 @@ SPONSOR_BLOCK_CATEGORIES = {
 
 
 logger = logging.getLogger(__name__)
+
+# Compile the regex once for efficiency
+radio_edit_regex = re.compile(r"(\s*[-(]\s*Radio (?:Edit|Mix|Version)\s*[)]?)")
 
 
 class DownloaderError(Exception):
@@ -266,6 +271,101 @@ class Downloader:
 
         return results[0]
 
+    def get_alternative_extended_version(self, original_song: Song) -> Song:
+        """
+        Try to find whether there are alternative versions for a song through an ISRC search, 
+        prioritizing Extended Mix > Original Mix > blank > Radio Edit/Version/Mix.
+
+        ### Arguments
+        - song: The song to get the ISRC for.
+
+        ### Returns
+        - The best alternative ISRC if found, else None.
+        """
+        from spotdl.utils.matching import ratio, slugify
+
+        new_song = copy.deepcopy(original_song)
+        # remove the isrc from the new song if it matches the regex
+        if new_song.isrc and radio_edit_regex.match(new_song.isrc):
+            new_song.isrc = None
+
+        new_song.name = radio_edit_regex.sub("", original_song.name).strip()
+
+        # Find alternative ISRCs using SoundExchange API
+        alternatives = find_isrc_alternatives(new_song)
+        if not alternatives:
+            return new_song
+
+        # Prioritize by title/artist match and version
+        def score(rec):
+            title_score = ratio(slugify(original_song.name), slugify(rec.get("recordingTitle") or ""))
+            artist_score = ratio(slugify(original_song.artist), slugify(rec.get("recordingArtistName") or ""))
+            version = (rec.get("recordingVersion") or "").lower()
+            if "extended mix" in version:
+                version_score = 3
+            elif "original mix" in version:
+                version_score = 2
+            elif version.strip() == "":
+                version_score = 1
+            elif any(x in version for x in ["radio edit", "radio version", "radio mix"]):
+                version_score = -2
+            else:
+                version_score = 0
+            return title_score * 10 + artist_score * 10 + version_score * 1
+
+        best = max(alternatives, key=score)
+        # Only accept if artist matches and new_song.name (new_song name is the stripped version) is a substring of the best recordingTitle
+        if (
+            best.get("recordingArtistName") != new_song.artist
+            or new_song.name.lower() not in (best.get("recordingTitle") or "").lower()
+        ):
+            return new_song
+
+        # Update the song with the best result
+        new_song.isrc = best.get("isrc")
+        # Set the new song name, including the version in parentheses if present
+        version = best.get("recordingVersion")
+        if version and version.strip():
+            new_song.name = f"{best.get('recordingTitle') or original_song.name} ({version.strip()})"
+        else:
+            new_song.name = best.get("recordingTitle") or original_song.name
+        new_song.artist = best.get("recordingArtistName") or original_song.artist
+        year_str = best.get("recordingYear")
+        if year_str and isinstance(year_str, str) and year_str.isdigit():
+            new_song.year = int(year_str)
+        # Update duration if available and in the format mm:ss or h:mm:ss
+        duration_str = best.get("duration")
+        if duration_str and isinstance(duration_str, str):
+            parts = duration_str.strip().split(":")
+            try:
+                if len(parts) == 2:
+                    minutes, seconds = map(int, parts)
+                    new_song.duration = minutes * 60 + seconds
+                elif len(parts) == 3:
+                    hours, minutes, seconds = map(int, parts)
+                    new_song.duration = hours * 3600 + minutes * 60 + seconds
+            except Exception:
+                pass  # Ignore if parsing fails
+
+        # If new song title is now the same as the original song title, we should just keep the original song
+        if new_song.name.lower() == original_song.name.lower():
+            return original_song
+
+        # Print an information if isrc or title or artist between original and new song differ
+        if (
+            original_song.isrc != new_song.isrc
+            or original_song.name != new_song.name
+        ):
+            logger.info(
+                "Found alternative version for '%s': '%s' by '%s' (ISRC: %s)",
+                original_song.display_name,
+                new_song.name,
+                new_song.artist,
+                new_song.isrc,
+            )
+        
+        return new_song
+
     def download_multiple_songs(
         self, songs: List[Song]
     ) -> List[Tuple[Song, Optional[Path]]]:
@@ -303,18 +403,15 @@ class Downloader:
         if self.settings["prefer_extended_mixes"]:
             # Remove terms like "Radio Edit", "Radio Version", "Radio Mix" from song names.
             # We also need to remove ISRCs from the one with these terms in the title.
-            for song in songs:
-                # Compile the regex once for efficiency
-                radio_edit_regex = re.compile(r"(\s*[-(]\s*Radio (?:Edit|Mix|Version)\s*[)]?)")
+            for i, song in enumerate(songs):
+                # reinit song here to make sure we have the latest metadata
+                # I know this doesn't work well with the threading model,
+                # but we need to do it here so that we can disable reinits later and keep our changes
+                song = reinit_song(song)
 
-                if song.isrc and radio_edit_regex.search(song.name):
-                    # Remove ISRCs from songs with "Radio Edit" in the title
-                    song.isrc = None
-
-                # Remove "Radio Edit" from the song name
-                song.name = radio_edit_regex.sub("", song.name).strip()
+                alternative_version = self.get_alternative_extended_version(song)
+                songs[i] = alternative_version
                 
-
         self.progress_handler.set_song_count(len(songs))
 
         # Create tasks list
@@ -568,6 +665,7 @@ class Downloader:
             # Force song reinitialization if we are fetching albums
             # they have most metadata but not all
             if (
+                self.settings["prefer_extended_mixes"] is False and (
                 (song.name is None and song.url)
                 or (self.settings["fetch_albums"] and reinitialized is False)
                 or None
@@ -579,6 +677,7 @@ class Downloader:
                     song.album_id,
                     song.album_artist,
                 ]
+                )
             ):
                 song = reinit_song(song)
                 reinitialized = True
