@@ -301,9 +301,9 @@ class Downloader:
             title_score = ratio(slugify(original_song.name), slugify(rec.get("recordingTitle") or ""))
             artist_score = ratio(slugify(original_song.artist), slugify(rec.get("recordingArtistName") or ""))
             version = (rec.get("recordingVersion") or "").lower()
-            if "extended mix" in version:
+            if "extended mix" == version or "extended" == version or "extended version" == version:
                 version_score = 3
-            elif "original mix" in version:
+            elif "original mix" == version or "original" == version or "original version" == version:
                 version_score = 2
             elif version.strip() == "":
                 version_score = 1
@@ -357,10 +357,10 @@ class Downloader:
             or original_song.name != new_song.name
         ):
             logger.info(
-                "Found alternative version for '%s': '%s' by '%s' (ISRC: %s)",
+                "[Prefer Extended] Found alternative version for '%s': '%s - %s' (ISRC: %s)",
                 original_song.display_name,
-                new_song.name,
                 new_song.artist,
+                new_song.name,
                 new_song.isrc,
             )
         
@@ -399,18 +399,6 @@ class Downloader:
         if self.settings["archive"]:
             songs = [song for song in songs if song.url not in self.url_archive]
             logger.debug("Filtered %d songs with archive", len(songs))
-
-        if self.settings["prefer_extended_mixes"]:
-            # Remove terms like "Radio Edit", "Radio Version", "Radio Mix" from song names.
-            # We also need to remove ISRCs from the one with these terms in the title.
-            for i, song in enumerate(songs):
-                # reinit song here to make sure we have the latest metadata
-                # I know this doesn't work well with the threading model,
-                # but we need to do it here so that we can disable reinits later and keep our changes
-                song = reinit_song(song)
-
-                alternative_version = self.get_alternative_extended_version(song)
-                songs[i] = alternative_version
                 
         self.progress_handler.set_song_count(len(songs))
 
@@ -582,6 +570,17 @@ class Downloader:
             return song, None
 
         reinitialized = False
+
+        if self.settings["prefer_extended_mixes"]:
+
+            # reinit song here to make sure we have the latest metadata
+            # I know this doesn't work well with the threading model,
+            # but we need to do it here so that we can disable reinits later and keep our changes
+            song = reinit_song(song)
+            reinitialized = True
+            song = self.get_alternative_extended_version(song)
+
+
         try:
             # Create the output file path
             output_file = create_file_name(
