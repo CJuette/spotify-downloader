@@ -549,6 +549,6 @@ class ExtendedMixMatcher(StandardMatcher):
         best_standard, score_standard = super().get_best_result(standard_results) if standard_results else (None, None)
 
         if best_extended != best_standard:
-            print(f"[ExtendedMixMatcher] Best result differs from StandardMatcher:\n"
+            logging.info(f"[ExtendedMixMatcher] Best result differs from StandardMatcher:\n"
                   f"  ExtendedMixMatcher: artist={getattr(best_extended, 'artist', None)}, name={getattr(best_extended, 'name', None)} (score: {score_extended})\n"
                   f"  StandardMatcher: artist={getattr(best_standard, 'artist', None)}, name={getattr(best_standard, 'name', None)} (score: {score_standard})")
