@@ -354,7 +354,7 @@ class ExtendedMixMatcher(StandardMatcher):
         """
 
         # Extended Mix Matcher doesn't work well currently, so using the StandardMatcher's order_results for now
-        return super().order_results(results, song, search_query)
+        # return super().order_results(results, song, search_query)
 
         # Assign an overall avg match value to each result
         links_with_match_value = {}
@@ -523,38 +523,6 @@ class ExtendedMixMatcher(StandardMatcher):
 
             # the results along with the avg Match
             links_with_match_value[result] = average_match
-
-        # If we have more than one result, prefer by score, views, and duration (favoring extended versions)
-        if len(links_with_match_value) > 1:
-            results_list = list(links_with_match_value.items())
-            durations: List[float] = []
-            for result, _ in results_list:
-                # Get duration
-                if hasattr(result, "duration") and result.duration:
-                    durations.append(result.duration)
-
-            longest_duration = max(durations)
-            shortest_duration = min(durations)
-
-            weighted_results: List[Tuple[Result, float]] = []
-            for idx, (result, avg_score) in enumerate(results_list):
-                result_duration = durations[idx]
-                duration_score = (
-                    (result_duration - shortest_duration)
-                    / ((longest_duration - shortest_duration) + 1e-6)
-                ) * 100
-                score_weight = 1.0
-                duration_weight = 0.2
-                score = (
-                    avg_score * score_weight
-                    + duration_score * duration_weight
-                ) / (score_weight + duration_weight)
-                weighted_results.append((result, score))
-
-            # Sort by weighted score descending
-            weighted_results.sort(key=lambda x: x[1], reverse=True)
-            # Rebuild links_with_match_value with new scores
-            links_with_match_value = {r: s for r, s in weighted_results}
 
         self.compare_with_standard(links_with_match_value, song, search_query)
         return links_with_match_value
