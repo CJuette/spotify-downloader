@@ -3,6 +3,7 @@ Song module that hold the Song and SongList classes.
 """
 
 import json
+import logging
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -12,6 +13,8 @@ from spotdl.types.result import Result
 from spotdl.utils.spotify import SpotifyClient
 
 __all__ = ["Song", "SongList", "SongError"]
+
+logger = logging.getLogger(__name__)
 
 
 class SongError(Exception):
@@ -164,10 +167,17 @@ class Song:
         ### Arguments
         - result: The search result to update from.
         """
-        self.name = result.name
-        self.url = result.url
-        self.artist = str(result.artists)
-        self.artists = list(result.artists) if result.artists is not None else []
+        if (
+           self.artist.lower() in result.name.lower() 
+           and self.artist.lower() not in [artist.lower() for artist in list(result.artists or [])]
+           ):
+            logger.info("Artist in result name but not in artist name - not updating certain metadata.")
+        else:
+            self.name = result.name
+            self.artist = str(result.artists)
+            self.artists = list(result.artists) if result.artists is not None else []
+
+        # don't update url because we want the original spotify url
         self.duration = int(result.duration)
         self.explicit = result.explicit if result.explicit is not None else self.explicit
         self.album_name = result.album if result.album is not None else self.album_name
