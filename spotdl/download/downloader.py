@@ -508,6 +508,8 @@ class Downloader:
                     audio_provider.name,
                     exc,
                 )
+                # TODO: Check how to log this properly
+                print(traceback.format_exc())
                 self.errors.append(
                     f"Error while searching for {song.display_name} on {audio_provider.name}: {exc}"
                 )
