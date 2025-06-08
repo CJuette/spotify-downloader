@@ -1,6 +1,10 @@
 import requests
 from spotdl.types.song import Song
 from typing import List, Dict, Any, TypedDict, Optional
+import logging
+import time
+
+logger = logging.getLogger(__name__)
 
 class ISRCResult(TypedDict):
     duration: Optional[str]
@@ -56,11 +60,26 @@ def find_isrc_alternatives(song: Song, number: int = 10) -> List[ISRCResult]:
         "Content-Type": "application/json",
         "Authorization": "Token 548fa8b24c6e44f4106b380f1882f0502c9ef4ab",
     }
-    response = requests.post(url, json=payload, headers=headers, timeout=10)
-    response.raise_for_status()
-    data = response.json()
-    # Convert each result to ISRCResult type (dict with correct keys)
-    # Convert each result to ISRCResult type (dict with correct keys)
+
+    for attempt in range(10):
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
+
+        if response.status_code == 200:
+            break
+        else:
+            logger.warning(f"Attempt {attempt + 1}: Received HTTP {response.status_code}. Retrying in 5 seconds...")
+            time.sleep(5)
+    else:
+        logger.error("Failed to fetch data from ISRC API after 10 attempts.")
+        raise ConnectionError("Failed to fetch data from ISRC API after 10 attempts.")
+
+    try:
+        data = response.json()
+    except requests.exceptions.JSONDecodeError:
+        logger.error("Failed to decode JSON response from ISRC API.")
+        raise ValueError("Invalid JSON response from ISRC API")
+
     results = data.get("recordings", [])
+    # Convert each result to ISRCResult type (dict with correct keys)
     typed_results: List[ISRCResult] = [isrcresult_from_api_dict(rec) for rec in results]
     return typed_results
