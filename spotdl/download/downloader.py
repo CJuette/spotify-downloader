@@ -293,7 +293,7 @@ class Downloader:
 
         # Find alternative ISRCs using SoundExchange API
         alternatives = find_isrc_alternatives(new_song)
-        if not alternatives:
+        if len(alternatives) <= 0:
             return new_song
 
         # Prioritize by title/artist match and version
