@@ -36,31 +36,36 @@ def isrcresult_from_api_dict(rec: dict) -> ISRCResult:
 
 def fetch_isrc_data(payload: dict, headers: dict, url: str, retries: int = 10, delay: int = 5) -> List[dict]:
     """
-    Fetch data from the ISRC API with retry logic.
+    Fetch data from the ISRC API with retry logic and exponential backoff.
 
     Args:
         payload (dict): The payload for the API request.
         headers (dict): The headers for the API request.
         url (str): The API endpoint URL.
         retries (int): Number of retry attempts (default 10).
-        delay (int): Delay between retries in seconds (default 5).
+        delay (int): Initial delay between retries in seconds (default 5).
 
     Returns:
         List[dict]: List of recordings from the API response.
     """
     for attempt in range(retries):
-        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=10)
 
-        if response.status_code == 200:
-            try:
-                data = response.json()
-                return data.get("recordings", [])
-            except requests.exceptions.JSONDecodeError:
-                logger.error("Failed to decode JSON response from ISRC API.")
-                raise ValueError("Invalid JSON response from ISRC API")
-        else:
-            logger.warning(f"Attempt {attempt + 1}: Received HTTP {response.status_code}. Retrying in {delay} seconds...")
-            time.sleep(delay)
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                    return data.get("recordings", [])
+                except requests.exceptions.JSONDecodeError:
+                    logger.error("Failed to decode JSON response from ISRC API.")
+                    raise ValueError("Invalid JSON response from ISRC API")
+            else:
+                logger.warning(f"Attempt {attempt + 1}: Received HTTP {response.status_code}. Retrying in {delay} seconds...")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Attempt {attempt + 1}: Request failed with error: {e}. Retrying in {delay} seconds...")
+
+        time.sleep(delay)
+        delay *= 2  # Exponential backoff
 
     logger.error("Failed to fetch data from ISRC API after multiple attempts.")
     raise ConnectionError("Failed to fetch data from ISRC API after multiple attempts.")
