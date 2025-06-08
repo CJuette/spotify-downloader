@@ -298,18 +298,26 @@ class Downloader:
         # Prioritize by title/artist match and version
         def score(rec):
             title_score = ratio(slugify(original_song.name), slugify(rec.get("recordingTitle") or ""))
+            if len(original_song.artists) > 0:
+                title_score_with_feat = ratio(slugify(original_song.name + " feat. " + ", ".join(original_song.artists[1:])), slugify(rec.get("recordingTitle") or ""))
+                title_score = max(title_score, title_score_with_feat)
             artist_score = ratio(slugify(original_song.artist), slugify(rec.get("recordingArtistName") or ""))
             version = (rec.get("recordingVersion") or "").lower()
             if "extended mix" == version or "extended" == version or "extended version" == version:
-                version_score = 3
+                version_score = 30
             elif "original mix" == version or "original" == version or "original version" == version:
-                version_score = 2
+                version_score = 20
             elif version.strip() == "":
-                version_score = 1
+                version_score = 10
+            elif version not in original_song.name.lower():
+                version_score = -10
+            elif any(x in version and x not in original_song.name.lower() for x in ["mix", "edit"]):
+                version_score = -10
             elif any(x in version for x in ["radio edit", "radio version", "radio mix"]):
-                version_score = -2
+                version_score = -20
             else:
                 version_score = 0
+            
             return title_score * 10 + artist_score * 10 + version_score * 1
 
         best = max(alternatives, key=score)
