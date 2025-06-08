@@ -77,7 +77,17 @@ class BandCampTrack:
             timeout=10,
             proxies=GlobalConfig.get_parameter("proxies"),
         )
-        result = response.json()
+
+        if response.status_code != 200:
+            logger.error(f"Failed to fetch track details: HTTP {response.status_code}")
+            raise ValueError("Failed to fetch track details")
+
+        try:
+            result = response.json()
+        except requests.exceptions.JSONDecodeError:
+            logger.error("Failed to decode JSON response for track details")
+            raise ValueError("Invalid JSON response for track details")
+
         self.track_id = result["id"]
         self.track_title = result["title"]
         self.track_number = result["tracks"][0]["track_num"]
@@ -94,8 +104,17 @@ class BandCampTrack:
                 timeout=10,
                 proxies=GlobalConfig.get_parameter("proxies"),
             )
-            rjson = resp.json()
-            self.lyrics = rjson["lyrics"][str(self.track_id)]
+
+            if resp.status_code != 200:
+                logger.error(f"Failed to fetch lyrics: HTTP {resp.status_code}")
+                self.lyrics = ""
+            else:
+                try:
+                    rjson = resp.json()
+                    self.lyrics = rjson.get("lyrics", {}).get(str(self.track_id), "")
+                except requests.exceptions.JSONDecodeError:
+                    logger.error("Failed to decode JSON response for lyrics")
+                    self.lyrics = ""
 
         self.is_price_set = result["is_set_price"]
         self.price = {"currency": result["currency"], "amount": result["price"]}
@@ -149,13 +168,21 @@ def search(search_string: str = ""):
         proxies=GlobalConfig.get_parameter("proxies"),
     )
 
-    results = response.json()["results"]
+    if response.status_code != 200:
+        logger.error(f"Failed to fetch search results: HTTP {response.status_code}")
+        return []
+
+    try:
+        results = response.json().get("results", [])
+    except requests.exceptions.JSONDecodeError:
+        logger.error("Failed to decode JSON response for search results")
+        return []
 
     return_results: List[Tuple[str, str]] = []
 
     for item in results:
-        if item["type"] == "t":
-            return_results.append((item["band_id"], item["id"]))
+        if item.get("type") == "t":
+            return_results.append((item.get("band_id"), item.get("id")))
 
     return return_results
 
