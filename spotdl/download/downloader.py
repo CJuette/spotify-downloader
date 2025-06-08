@@ -286,10 +286,9 @@ class Downloader:
 
         new_song = copy.deepcopy(original_song)
         # remove the isrc from the new song if it matches the regex
-        if new_song.isrc and radio_edit_regex.match(new_song.isrc):
-            new_song.isrc = None
-
-        new_song.name = radio_edit_regex.sub("", original_song.name).strip()
+        if new_song.isrc and radio_edit_regex.findall(new_song.name):
+            new_song.isrc = ""
+            new_song.name = radio_edit_regex.sub("", original_song.name).strip()
 
         # Find alternative ISRCs using SoundExchange API
         alternatives = find_isrc_alternatives(new_song)
@@ -998,6 +997,7 @@ class Downloader:
                     skip_album_art=self.settings["skip_album_art"],
                 )
             except Exception as exception:
+                print(traceback.format_exc())
                 raise MetadataError(
                     "Failed to embed metadata to the song"
                 ) from exception
