@@ -102,27 +102,28 @@ class StandardMatcher(Matcher):
         # and most views
         if len(best_results) > 1:
             views: List[int] = []
-            for best_result in best_results:
-                if best_result[0].views:
-                    views.append(best_result[0].views)
+            for result in best_results:
+                if result[0].views:
+                    views.append(result[0].views)
 
-            highest_views = max(views)
-            lowest_views = min(views)
+            if views:
+                highest_views = max(views)
+                lowest_views = min(views)
 
-            if highest_views in (0, lowest_views):
-                return best_result[0], best_result[1]
+                if highest_views in (0, lowest_views):
+                    return best_result[0], best_result[1]
 
-            weighted_results: List[Tuple[Result, float]] = []
-            for index, best_result in enumerate(best_results):
-                result_views = views[index]
-                views_score = (
-                    (result_views - lowest_views) / (highest_views - lowest_views)
-                ) * 15
-                score = min(best_result[1] + views_score, 100)
-                weighted_results.append((best_result[0], score))
+                weighted_results: List[Tuple[Result, float]] = []
+                for index, best_result in enumerate(best_results):
+                    result_views = views[index]
+                    views_score = (
+                        (result_views - lowest_views) / (highest_views - lowest_views)
+                    ) * 15
+                    score = min(best_result[1] + views_score, 100)
+                    weighted_results.append((best_result[0], score))
 
-            # Now we return the result with the highest score
-            return max(weighted_results, key=lambda x: x[1])
+                # Now we return the result with the highest score
+                return max(weighted_results, key=lambda x: x[1])
 
         return best_result[0], best_result[1]
     
