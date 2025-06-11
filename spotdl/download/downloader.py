@@ -303,9 +303,12 @@ class Downloader:
                 title_score = max(title_score, title_score_with_feat)
             artist_score = ratio(slugify(original_song.artist), slugify(rec.get("recordingArtistName") or ""))
             version = (rec.get("recordingVersion") or "").lower()
-            if "extended mix" == version or "extended" == version or "extended version" == version:
+            extended_variants = {"extended mix", "extended", "extended version", "extended-mix", "extended-version"}
+            original_variants = {"original mix", "original", "original version", "original-mix", "original-version"}
+            
+            if version in extended_variants:
                 version_score = 30
-            elif "original mix" == version or "original" == version or "original version" == version:
+            elif version in original_variants:
                 version_score = 20
             elif version.strip() == "":
                 version_score = 10
@@ -313,7 +316,7 @@ class Downloader:
                 version_score = -10
             elif any(x in version and x not in original_song.name.lower() for x in ["mix", "edit"]):
                 version_score = -10
-            elif any(x in version for x in ["radio edit", "radio version", "radio mix"]):
+            elif any(x in version for x in ["radio edit", "radio version", "radio mix", "radio-edit", "radio-version", "radio-mix"]):
                 version_score = -20
             else:
                 version_score = 0
