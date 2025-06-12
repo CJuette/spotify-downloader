@@ -524,7 +524,7 @@ class ExtendedMixMatcher(StandardMatcher):
             # the results along with the avg Match
             links_with_match_value[result] = average_match
 
-        self.compare_with_standard(links_with_match_value, song, search_query)
+        # self.compare_with_standard(links_with_match_value, song, search_query)
         return links_with_match_value
     
     
