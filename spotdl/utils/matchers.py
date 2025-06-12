@@ -479,7 +479,7 @@ class ExtendedMixMatcher(StandardMatcher):
                 )
 
             # Skip results that are shorter than the original track
-            time_diff = abs(song.duration - result.duration)
+            time_diff = result.duration - song.duration
             if time_diff < 0:
                 debug(
                     song.song_id,
