@@ -473,7 +473,13 @@ class Downloader:
         # Save results to a file
         if self.settings["save_file"]:
             with open(self.settings["save_file"], "w", encoding="utf-8") as save_file:
-                json.dump([song.json for song, _ in results], save_file, indent=4)
+                song_dicts = []
+                for song, path in results:
+                    song_json = song.json
+                    song_json["path"] = str(path.absolute()) if path else ""
+                    song_dicts.append(song_json)
+
+                json.dump(song_dicts, save_file, indent=4)
 
             logger.info("Saved results to %s", self.settings["save_file"])
 

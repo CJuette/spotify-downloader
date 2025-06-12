@@ -75,7 +75,26 @@ def sync(
             )
 
         # Perform initial download
-        downloader.download_multiple_songs(songs_list)
+        results = downloader.download_multiple_songs(songs_list)
+
+        # Update sync file
+        with open(save_path, "w", encoding="utf-8") as save_file:
+            song_dicts = []
+            for song, path in results:
+                song_json = song.json
+                song_json["path"] = str(path.absolute()) if path else ""
+                song_dicts.append(song_json)
+
+            json.dump(
+                {
+                    "type": "sync",
+                    "query": query,
+                    "songs": song_dicts,
+                },
+                save_file,
+                indent=4,
+                ensure_ascii=False,
+            )
 
         # Create m3u file
         if m3u_file:
