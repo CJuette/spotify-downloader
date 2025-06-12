@@ -11,6 +11,9 @@ import re
 import shutil
 import sys
 import traceback
+import queue
+import threading
+import os
 from argparse import Namespace
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Type, Union
@@ -95,6 +98,46 @@ class DownloaderError(Exception):
     Base class for all exceptions related to downloaders.
     """
 
+# Add a synchronous prompt handler for blocking prompt in main thread
+from rich.console import Console
+from rich.panel import Panel
+from rich.prompt import Prompt
+from rich.align import Align
+
+def prompt_handler(prompt_queue: queue.Queue, progress_handler: ProgressHandler):
+    console = Console()
+    while True:
+        prompt = prompt_queue.get()
+        song = prompt["song"]
+        best_result = prompt["best_result"]
+        answer_queue = prompt["answer_queue"]
+        result_display_name = ", ".join(best_result.artists) + " - " + best_result.name
+
+        # Pause progress output
+        progress_handler.pause()
+        # Clear the screen for focus
+        # console.clear()
+
+        # Build the modal panel
+        panel_content = f"[bold yellow]Found extended version:[/bold yellow]\n" \
+            f"[bold]{result_display_name}[/bold]\n" \
+            f"[dim]for:[/dim] [bold]{song.display_name}[/bold]\n" \
+            f"[dim]Link:[/dim] [blue underline]{best_result.url}[/blue underline]\n\n" \
+            f"[bold]Do you want to use this?[/bold] ([green]y[/green]/[red]n[/red])"
+        panel = Panel(Align.center(panel_content, vertical="middle"), title="Extended Mix Found", border_style="magenta", padding=(1, 4))
+        console.print(panel)
+
+        # Prompt for input using Rich
+        while True:
+            answer = Prompt.ask("[bold]Select[/bold]", choices=["y", "n"], default="y")
+            if answer.lower() in ("y", "n"):
+                break
+        answer_queue.put(answer.lower())
+
+        # Clear the screen again after the dialog
+        # console.clear()
+        # Resume progress output
+        progress_handler.resume()
 
 class Downloader:
     """
@@ -166,6 +209,11 @@ class Downloader:
         self.semaphore = asyncio.Semaphore(self.settings["threads"])
 
         self.progress_handler = ProgressHandler(self.settings["simple_tui"])
+
+        # Replace asyncio.Queue with queue.Queue for prompt_queue
+        self.prompt_queue = queue.Queue()
+        # Start the prompt handler in a daemon thread
+        threading.Thread(target=prompt_handler, args=(self.prompt_queue, self.progress_handler), daemon=True).start()
 
         # Gather already present songs
         self.scan_formats = self.settings["detect_formats"] or [self.settings["format"]]
@@ -570,16 +618,22 @@ class Downloader:
                 if extended_version_inserted:
                     # Only use it if it's actually extended.
                     if best_result.duration > song.duration + 2 and self.is_pure_extended_version(song.name, best_result.name, song.artists):
-                        logger.warning(
-                            "Found extended version '%s - %s', (%s s) for '%s' (%s s) on %s",
-                            ", ".join(best_result.artists) if best_result.artists else best_result.author,
-                            best_result.name,
-                            best_result.duration,
-                            song.display_name,
-                            song.duration,
-                            best_result.source,
-                        )
-                        return best_result
+                        if self.prompt_queue:
+                            # Synchronous, blocking prompt using queue.Queue
+                            answer_queue = queue.Queue()
+                            self.prompt_queue.put({
+                                "song": song,
+                                "best_result": best_result,
+                                "answer_queue": answer_queue,
+                            })
+                            answer = answer_queue.get()  # Block until main thread responds
+                            if answer.lower() == "y":
+                                return best_result
+                            else:
+                                logger.debug("User chose not to use extended version for %s", song.display_name)
+                        else:
+                            # fallback: always use
+                            return best_result
                 else:
                     return best_result
             

@@ -130,6 +130,7 @@ class ProgressHandler:
         self.web_ui = web_ui
         self.quiet = logger.getEffectiveLevel() < 10
         self.overall_task_id: Optional[TaskID] = None
+        self.paused = False
 
         if not self.simple_tui:
             console = get_console()
@@ -155,6 +156,16 @@ class ProgressHandler:
 
             # Basically a wrapper for rich's: with ... as ...
             self.rich_progress_bar.__enter__()
+
+    def pause(self):
+        """Pause progress output."""
+        self.paused = True
+        self.rich_progress_bar.stop()
+
+    def resume(self):
+        """Resume progress output."""
+        self.paused = False
+        self.rich_progress_bar.start()
 
     def add_song(self, song: Song) -> None:
         """
@@ -205,6 +216,9 @@ class ProgressHandler:
         """
         Update the overall progress bar.
         """
+
+        if self.paused:
+            return
 
         if not self.simple_tui:
             # If the overall progress bar exists
@@ -292,6 +306,9 @@ class SongTracker:
         ### Arguments
         - message: The message to display.
         """
+
+        if self.parent.paused:
+            return
 
         old_message = self.status
         self.status = message
