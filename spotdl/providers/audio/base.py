@@ -148,9 +148,9 @@ class AudioProvider:
 
         return data["view_count"]
 
-    def search(self, song: Song, only_verified: bool = False) -> Optional[Result]:
+    def search(self, song: Song, only_verified: bool = False) -> Optional[Tuple[Result, float]]:
         """
-        Search for a song and return best match.
+        Search for a song and return best match together with score.
 
         ### Arguments
         - song: The song to search for.
@@ -199,7 +199,7 @@ class AudioProvider:
                     isrc_results[0].url,
                 )
 
-                return isrc_results[0]
+                return isrc_results[0], 100.0
 
             if len(isrc_results) > 0:
                 sorted_isrc_results = self.matcher.order_results(
@@ -227,7 +227,7 @@ class AudioProvider:
                             best_isrc[1],
                         )
 
-                        return best_isrc[0]
+                        return best_isrc[0], 100.0
 
         results: Dict[Result, float] = {}
         for options in self.GET_RESULTS_OPTS:
@@ -261,7 +261,7 @@ class AudioProvider:
                     "[%s] Best ISRC result is %s", song.song_id, isrc_result.url
                 )
 
-                return isrc_result
+                return isrc_result, 100.0
 
             logger.debug(
                 "[%s] Have to filter results: %s", song.song_id, self.filter_results
@@ -298,7 +298,7 @@ class AudioProvider:
                         best_score,
                     )
 
-                    return best_result
+                    return best_result, best_score
 
                 # Update final results with new results
                 results.update(new_results)
@@ -317,7 +317,7 @@ class AudioProvider:
             best_score,
         )
 
-        return best_result
+        return best_result, best_score
 
     def get_download_metadata(self, url: str, download: bool = False) -> Dict:
         """

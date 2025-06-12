@@ -271,7 +271,7 @@ class Downloader:
 
         return results[0]
 
-    def get_alternative_extended_version(self, original_song: Song) -> Song:
+    def get_alternative_extended_version(self, original_song: Song) -> Optional[Song]:
         """
         Try to find whether there are alternative versions for a song through an ISRC search, 
         prioritizing Extended Mix > Original Mix > blank > Radio Edit/Version/Mix.
@@ -280,7 +280,7 @@ class Downloader:
         - song: The song to get the ISRC for.
 
         ### Returns
-        - The best alternative ISRC if found, else None.
+        - The best alternative Song if found, else None.
         """
         from spotdl.utils.matching import ratio, slugify
 
@@ -293,7 +293,7 @@ class Downloader:
         # Find alternative ISRCs using SoundExchange API
         alternatives = find_isrc_alternatives(new_song)
         if len(alternatives) <= 0:
-            return new_song
+            return None
 
         # Prioritize by title/artist match and version
         def score(rec):
@@ -329,7 +329,7 @@ class Downloader:
             best.get("recordingArtistName") != new_song.artist
             or new_song.name.lower() not in (best.get("recordingTitle") or "").lower()
         ):
-            return new_song
+            return None
 
         # Update the song with the best result
         new_song.isrc = best.get("isrc")
@@ -359,7 +359,10 @@ class Downloader:
 
         # If new song title is now the same as the original song title, we should just keep the original song
         if new_song.name.lower() == original_song.name.lower():
-            return original_song
+            return None
+        
+        if not self.is_pure_extended_version(original_song.name, new_song.name, original_song.artists):
+            return None
 
         # Print an information if isrc or title or artist between original and new song differ
         if (
@@ -506,25 +509,75 @@ class Downloader:
         - tuple with download url and audio provider if successful.
         """
 
-        for audio_provider in self.audio_providers:
-            try: 
-                result = audio_provider.search(song, self.settings["only_verified_results"])
-                if result:
-                    return result
-            except Exception as exc:
-                logger.error(
-                    "Error while searching for %s on %s: %s",
-                    song.display_name,
-                    audio_provider.name,
-                    exc,
-                )
-                # TODO: Check how to log this properly
-                print(traceback.format_exc())
-                self.errors.append(
-                    f"Error while searching for {song.display_name} on {audio_provider.name}: {exc}"
-                )
+        song_candidates = []
+        song_candidates.append(song)
 
-            logger.debug("%s failed to find %s", audio_provider.name, song.display_name)
+        extended_version_inserted = False
+
+        if self.settings["prefer_extended_mixes"]:
+            # Try to get alternative extended version if available
+            extended_song = self.get_alternative_extended_version(song)
+            if extended_song:
+                song_candidates.insert(0, extended_song)
+                extended_version_inserted = True
+            else:
+                # Add a version where we just strip isrc and duration and add extended mix to it
+                extended_song = copy.deepcopy(song)
+                extended_song.isrc = ""
+                
+                # remove radio edit/mix/version from the name
+                extended_song.name = radio_edit_regex.sub("", song.name).strip()
+                
+                # If the song name does not contain "Extended Mix" or similar, add it
+                if not any(term in extended_song.name.lower() for term in ["remix", "extended mix", "extended version"]):
+                    extended_song.name += " (Extended Mix)"
+                    song_candidates.insert(0, extended_song)
+                    extended_version_inserted = True
+
+        for song_candidate in song_candidates:
+            result_tuples = []
+
+            for audio_provider in self.audio_providers:
+                try: 
+                    result_tuple = audio_provider.search(song_candidate, self.settings["only_verified_results"])
+                    if result_tuple:
+                        result_tuples.append(result_tuple)
+                except Exception as exc:
+                    logger.error(
+                        "Error while searching for %s on %s: %s",
+                        song_candidate.display_name,
+                        audio_provider.name,
+                        exc,
+                    )
+                    # TODO: Check how to log this properly
+                    print(traceback.format_exc())
+                    self.errors.append(
+                        f"Error while searching for {song_candidate.display_name} on {audio_provider.name}: {exc}"
+                    )
+
+                logger.debug("%s failed to find %s", audio_provider.name, song_candidate.display_name)
+
+            if len(result_tuples) > 0:
+                # Sort by score and return the best result
+                result_tuples.sort(key=lambda x: x[1], reverse=True)
+                best_result = result_tuples[0][0]
+                if extended_version_inserted:
+                    # Only use it if it's actually extended.
+                    if best_result.duration > song.duration + 2 and self.is_pure_extended_version(song.name, best_result.name, song.artists):
+                        logger.warning(
+                            "Found extended version '%s - %s', (%s s) for '%s' (%s s) on %s",
+                            ", ".join(best_result.artists) if best_result.artists else best_result.author,
+                            best_result.name,
+                            best_result.duration,
+                            song.display_name,
+                            song.duration,
+                            best_result.source,
+                        )
+                        return best_result
+                else:
+                    return best_result
+            
+            extended_version_inserted = False
 
         raise LookupError(f"No results found for song: {song.display_name}")
 
@@ -590,7 +643,6 @@ class Downloader:
             # but we need to do it here so that we can disable reinits later and keep our changes
             song = reinit_song(song)
             reinitialized = True
-            song = self.get_alternative_extended_version(song)
 
 
         try:
@@ -1040,3 +1092,30 @@ class Downloader:
                 f"{song.url} - {exception.__class__.__name__}: {exception}"
             )
             return song, None
+
+    def is_pure_extended_version(self, song_name: str, name_to_test: str, song_artists: List[str]) -> bool:
+        """
+        Check if the best result is a pure extended version of the song.
+
+        ### Arguments
+        - song_name: The original song name.
+        - best_result_name: The name of the best result.
+        - song_artists: List of original song artists.
+
+        ### Returns
+        - True if the best result is a pure extended version, False otherwise.
+        """
+        allowed_terms = {"extended", "mix", "version", "edit", "original"}
+        # Add the original song artists to the allowed terms
+        for artist in song_artists:
+            allowed_terms.update({term for term in artist.lower().split()})
+
+        radio_stripped = radio_edit_regex.sub("", song_name).replace("-", "").replace("(", "").replace(")", "").strip()
+        test_name_cleaned = name_to_test.replace("-", "").replace("(", "").replace(")", "").strip()
+
+        # Split strings by space and subtract lists/sets
+        test_name_terms = set(test_name_cleaned.lower().split())
+        radio_stripped_terms = set(radio_stripped.lower().split())
+        disallowed_additions = test_name_terms - radio_stripped_terms - allowed_terms
+
+        return not disallowed_additions
