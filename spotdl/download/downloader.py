@@ -87,7 +87,7 @@ SPONSOR_BLOCK_CATEGORIES = {
 logger = logging.getLogger(__name__)
 
 # Compile the regex once for efficiency
-radio_edit_regex = re.compile(r"(\s*[-(]\s*Radio (?:Edit|Mix|Version)\s*[)]?)")
+radio_edit_regex = re.compile(r"(\s*[-(]\s*Radio (?:Edit|Mix|Version)\s*[)]?)", re.IGNORECASE)
 
 
 class DownloaderError(Exception):
