@@ -108,10 +108,10 @@ def prompt_handler(prompt_queue: queue.Queue, progress_handler: ProgressHandler)
     console = Console()
     while True:
         prompt = prompt_queue.get()
-        song = prompt["song"]
-        best_result = prompt["best_result"]
+        song: Song = prompt["song"]
+        best_result: Result = prompt["best_result"]
         answer_queue = prompt["answer_queue"]
-        result_display_name = ", ".join(best_result.artists) + " - " + best_result.name
+        result_display_name = ", ".join(best_result.artists if best_result.artists else best_result.author) + " - " + best_result.name
 
         # Pause progress output
         progress_handler.pause()
