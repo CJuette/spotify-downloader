@@ -1176,6 +1176,10 @@ class Downloader:
         # Split strings by space and subtract lists/sets
         test_name_terms = set(test_name_cleaned.lower().split())
         radio_stripped_terms = set(radio_stripped.lower().split())
-        disallowed_additions = test_name_terms - radio_stripped_terms - allowed_terms
+        additional_terms = test_name_terms - radio_stripped_terms 
+        
+        has_additional_terms = len(additional_terms) > 0 # To prevent e.g. extra long music videos or cover songs
+        disallowed_terms = additional_terms - allowed_terms
+        has_disallowed_terms = len(disallowed_terms) > 0
 
-        return not disallowed_additions
+        return has_additional_terms and not has_disallowed_terms
