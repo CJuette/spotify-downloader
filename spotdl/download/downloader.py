@@ -633,6 +633,8 @@ class Downloader:
                                 logger.debug("User chose not to use extended version for %s", song.display_name)
                         else:
                             # fallback: always use
+                            result_display_name = ", ".join(best_result.artists if best_result.artists else best_result.author) + " - " + best_result.name
+                            logger.warning("Found extended version for '%s': '%s' (%s)", song.display_name, result_display_name, best_result.url)
                             return best_result
                 else:
                     return best_result
