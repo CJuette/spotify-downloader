@@ -171,7 +171,11 @@ class Song:
            self.artist.lower() in result.name.lower() 
            and self.artist.lower() not in [artist.lower() for artist in list(result.artists or [])]
            ):
-            logger.info("Artist in result name but not in artist name - not updating certain metadata.")
+            logger.info("! Artist in result name but not in artist name - not updating certain metadata.")
+        elif any(["wiedergaben" in artist.lower() for artist in list(result.artists or [])]):
+            # TODO: Fix bug properly
+            logger.info("! Artist in result artists is a play count - not updating certain metadata.")
+            self.name = result.name
         else:
             self.name = result.name
             self.artist = str(result.artists)
