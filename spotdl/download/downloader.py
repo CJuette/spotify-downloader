@@ -724,42 +724,39 @@ class Downloader:
         ):
             logger.error("Song is missing required fields: %s", song.display_name)
             self.errors.append(f"Song is missing required fields: {song.display_name}")
-
             return song, None
 
         reinitialized = False
 
-        if self.settings["prefer_extended_mixes"]:
-
-            # reinit song here to make sure we have the latest metadata
-            # I know this doesn't work well with the threading model,
-            # but we need to do it here so that we can disable reinits later and keep our changes
+        # Reinitialize the song object if it's missing metadata
+        # Or if we are fetching albums
+        if (
+            (song.name is None and song.url)
+            or self.settings["prefer_extended_mixes"]
+            or self.settings["fetch_albums"]
+            or any(
+                x is None
+                for x in [
+                    song.genres,
+                    song.disc_count,
+                    song.tracks_count,
+                    song.track_number,
+                    song.album_id,
+                    song.album_artist,
+                ]
+            )
+        ):
             song = reinit_song(song)
             reinitialized = True
 
-
-        try:
-            # Create the output file path
-            output_file = create_file_name(
-                song=song,
-                template=self.settings["output"],
-                file_extension=self.settings["format"],
-                restrict=self.settings["restrict"],
-                file_name_length=self.settings["max_filename_length"],
-            )
-
-        except Exception:
-            song = reinit_song(song)
-
-            output_file = create_file_name(
-                song=song,
-                template=self.settings["output"],
-                file_extension=self.settings["format"],
-                restrict=self.settings["restrict"],
-                file_name_length=self.settings["max_filename_length"],
-            )
-
-            reinitialized = True
+        # Create the output file path
+        output_file = create_file_name(
+            song=song,
+            template=self.settings["output"],
+            file_extension=self.settings["format"],
+            restrict=self.settings["restrict"],
+            file_name_length=self.settings["max_filename_length"],
+        )
 
         if song.explicit is True and self.settings["skip_explicit"] is True:
             logger.info("Skipping explicit song: %s", song.display_name)
@@ -785,7 +782,7 @@ class Downloader:
             ]
 
             # Checking if file already exists in all subfolders of output directory
-            file_exists = file_exists = output_file.exists() or dup_song_paths
+            file_exists = output_file.exists() or dup_song_paths
             if not self.settings["scan_for_songs"]:
                 for file_extension in self.scan_formats:
                     ext_path = output_file.with_suffix(f".{file_extension}")
@@ -1043,7 +1040,7 @@ class Downloader:
                     bitrate = (
                         f"{int(download_info['abr'])}k"
                         if download_info.get("abr")
-                        else "copy"
+                        else "128k"
                     )
                 elif self.settings["bitrate"] == "disable":
                     bitrate = None
