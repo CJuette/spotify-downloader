@@ -649,7 +649,7 @@ class Downloader:
                 if extended_version_inserted:
                     # Only use it if it's actually extended.
                     if best_result.duration > song.duration + 2 and self.is_pure_extended_version(song.name, best_result.name, song.artists):
-                        if self.prompt_queue:
+                        if None and self.prompt_queue:
                             # Synchronous, blocking prompt using queue.Queue
                             answer_queue = queue.Queue()
                             self.prompt_queue.put({
