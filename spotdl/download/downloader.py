@@ -457,34 +457,7 @@ class Downloader:
 
         logger.debug("Downloading %d songs", len(songs))
 
-        if self.settings["archive"]:
-
-            # Enhanced archive filtering: check both URLs and check if archived filename still exists
-            filtered_songs = []
-            for song in songs:
-                if song.url not in self.url_archive:
-                    filtered_songs.append(song)
-                else:
-                    # Check if the archived file still exists
-                    archived_filename = self.url_archive.get_filename(song.url)
-                    if archived_filename and Path(archived_filename).exists():
-                        logger.info(
-                            "Skipping %s (found in archive with existing file: %s)",
-                            song.display_name,
-                            archived_filename
-                        )
-                    else:
-                        # File no longer exists, re-download
-                        filtered_songs.append(song)
-                        if archived_filename:
-                            logger.info(
-                                "Re-downloading %s (archived file no longer exists: %s)",
-                                song.display_name,
-                                archived_filename
-                            )
-            
-            songs = filtered_songs
-            logger.debug("Filtered %d songs with archive", len(songs))
+        # Archive filtering is now handled per-song in search_and_download
                 
         self.progress_handler.set_song_count(len(songs))
 
@@ -766,6 +739,26 @@ class Downloader:
         display_progress_tracker = self.progress_handler.get_new_tracker(song)
 
         try:
+            # Check if the song is in the archive
+            if self.settings["archive"] and song.url in self.url_archive:
+                archived_filename = self.url_archive.get_filename(song.url)
+                if archived_filename and Path(archived_filename).exists():
+                    logger.info(
+                        "Skipping %s (found in archive with existing file: %s)",
+                        song.display_name,
+                        archived_filename
+                    )
+                    display_progress_tracker.notify_download_skip()
+                    return song, Path(archived_filename)
+                elif archived_filename:
+                    logger.info(
+                        "Re-downloading %s (archived file no longer exists: %s)",
+                        song.display_name,
+                        archived_filename
+                    )
+                # If no archived filename or file doesn't exist, continue with normal download
+
+
             # Create the temp folder path
             temp_folder = get_temp_path()
 
