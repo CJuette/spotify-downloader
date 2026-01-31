@@ -1613,7 +1613,7 @@ wheels = [
 
 [[package]]
 name = "spotdl"
-version = "4.4.3++cj.extendedv2"
+version = "4.4.3+cj.extendedv2"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
