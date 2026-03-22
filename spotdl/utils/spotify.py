@@ -224,25 +224,75 @@ class SpotifyClient(Spotify, metaclass=Singleton):
         `additional_types` to the playlist metadata endpoint. The playlist items are retrieved via
         `playlist_items` (which uses the newer `/items` endpoint), so we intentionally omit
         `additional_types` here.
+        
+        This method always fetches fresh data to check snapshot_id for cache invalidation.
         """
 
         plid = self._get_id("playlist", playlist_id)
-        # Intentionally do NOT pass additional_types
-        return self._get(f"playlists/{plid}", fields=fields, market=market)
+        # Always fetch fresh playlist metadata (never cached) to get current snapshot_id
+        response = self._get(f"playlists/{plid}", fields=fields, market=market, force_fresh=True)
+        
+        # Update snapshot_id tracking for cache invalidation
+        if response and response.get("snapshot_id"):
+            snapshot_key = f"__snapshot__{plid}"
+            old_snapshot = self.cache.get(snapshot_key)
+            new_snapshot = response["snapshot_id"]
+            
+            if old_snapshot and old_snapshot != new_snapshot:
+                # Playlist changed - invalidate cached playlist items
+                logger.info(
+                    "Playlist %s changed (snapshot %s -> %s), invalidating items cache",
+                    plid, old_snapshot[:8], new_snapshot[:8]
+                )
+                self._invalidate_playlist_items_cache(plid)
+            
+            # Update snapshot tracking in cache
+            self.cache[snapshot_key] = new_snapshot
+        
+        return response
+    
+    def _invalidate_playlist_items_cache(self, playlist_id: str):
+        """
+        Invalidate all cached playlist_items responses for a given playlist.
+        
+        ### Arguments
+        - playlist_id: The Spotify playlist ID
+        """
+        keys_to_delete = []
+        for cache_key in self.cache.keys():
+            # Parse cache key to check if it's for this playlist's items
+            try:
+                key_obj = json.loads(cache_key)
+                if key_obj.get("url", "").startswith(f"playlists/{playlist_id}/items"):
+                    keys_to_delete.append(cache_key)
+            except (json.JSONDecodeError, AttributeError):
+                continue
+        
+        for key in keys_to_delete:
+            logger.debug("Invalidating cache key: %s", key[:100])
+            del self.cache[key]
 
     def _get(self, url, args=None, payload=None, **kwargs):
         """
         Overrides the get method of the SpotifyClient.
         Allows us to cache requests
+        
+        ### Arguments
+        - url: The API endpoint URL
+        - args: Additional arguments (merged with kwargs)
+        - payload: Request payload
+        - force_fresh: If True, bypass cache and fetch fresh data (used for playlist metadata)
+        - **kwargs: Query parameters
         """
 
         use_cache = not self.no_cache  # type: ignore # pylint: disable=E1101
+        force_fresh = kwargs.pop("force_fresh", False)  # Extract force_fresh flag
 
         if args:
             kwargs.update(args)
 
         cache_key = None
-        if use_cache:
+        if use_cache and not force_fresh:
             key_obj = dict(kwargs)
             key_obj["url"] = url
             key_obj["data"] = json.dumps(payload)
@@ -250,7 +300,10 @@ class SpotifyClient(Spotify, metaclass=Singleton):
             if cache_key is None:
                 cache_key = url
             if self.cache.get(cache_key) is not None:
+                logger.debug("Cache HIT: %s", url)
                 return self.cache[cache_key]
+            else:
+                logger.debug("Cache MISS: %s", url)
 
         # Wrap in a try-except and retry up to `retries` times.
         response = None
@@ -263,7 +316,7 @@ class SpotifyClient(Spotify, metaclass=Singleton):
                 if retries <= 0:
                     raise exc
 
-        if use_cache and cache_key is not None:
+        if use_cache and cache_key is not None and not force_fresh:
             self.cache[cache_key] = response
 
         return response
@@ -272,21 +325,61 @@ class SpotifyClient(Spotify, metaclass=Singleton):
 def save_spotify_cache(cache: Dict[str, Optional[Dict]]):
     """
     Saves the Spotify cache to a file.
+    
+    Caches all Spotify API responses except playlist metadata (which is always fetched fresh
+    to check snapshot_id for changes). Playlist items ARE cached and invalidated when
+    snapshot_id changes. Playlist snapshots are stored in the cache with special keys
+    prefixed with __snapshot__.
 
     ### Arguments
-    - cache: The cache to save.
+    - cache: The cache dictionary to save
     """
 
     cache_file_loc = get_spotify_cache_path()
 
     logger.debug("Saving Spotify cache to %s", cache_file_loc)
 
-    # Only cache tracks
-    cache = {
-        key: value
-        for key, value in cache.items()
-        if value is not None and ("tracks/" in key or "playlists/" in key and "/items" in key)
-    }
+    # Cache everything except playlist metadata (we need fresh data for snapshot_id checking)
+    # We cache:
+    # - tracks/* (individual track details)
+    # - albums/* (album metadata)
+    # - artists/* (artist metadata) 
+    # - playlists/*/items (playlist contents - invalidated by snapshot_id)
+    # - __snapshot__* (snapshot_id tracking for playlists)
+    # We do NOT cache:
+    # - playlists/* (without /items) - always fetch fresh for snapshot_id
+    filtered_cache = {}
+    snapshot_count = 0
+    
+    for key, value in cache.items():
+        if value is None:
+            continue
+        
+        # Always keep snapshot tracking keys
+        if key.startswith("__snapshot__"):
+            filtered_cache[key] = value
+            snapshot_count += 1
+            continue
+        
+        # Check if this is a playlist metadata call (not items)
+        try:
+            key_obj = json.loads(key)
+            url = key_obj.get("url", "")
+            
+            # Skip playlist metadata (always fetch fresh), but keep playlist items
+            if url.startswith("playlists/") and "/items" not in url:
+                continue
+                
+            filtered_cache[key] = value
+        except (json.JSONDecodeError, AttributeError):
+            # If we can't parse the key, include it to be safe
+            filtered_cache[key] = value
 
     with open(cache_file_loc, "w", encoding="utf-8") as cache_file:
-        json.dump(cache, cache_file)
+        json.dump(filtered_cache, cache_file, indent=2)
+    
+    logger.info(
+        "Saved Spotify cache: %d entries, %d playlist snapshots",
+        len(filtered_cache) - snapshot_count,
+        snapshot_count
+    )
