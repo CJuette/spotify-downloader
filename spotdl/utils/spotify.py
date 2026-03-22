@@ -316,7 +316,9 @@ class SpotifyClient(Spotify, metaclass=Singleton):
                 if retries <= 0:
                     raise exc
 
-        if use_cache and cache_key is not None and not force_fresh:
+        # Only cache successful responses (not None, not errors)
+        # This prevents caching temporary failures (404, rate limits, etc.)
+        if use_cache and cache_key is not None and not force_fresh and response is not None:
             self.cache[cache_key] = response
 
         return response
