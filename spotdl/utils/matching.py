@@ -42,6 +42,7 @@ logger = logging.getLogger(__name__)
 FORBIDDEN_WORDS = [
     "bassboosted",
     "remix",
+    "rework",
     "remastered",
     "remaster",
     "reverb",
