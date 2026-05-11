@@ -58,6 +58,7 @@ FORBIDDEN_WORDS = [
     "remix",
     "cover",
     "reverb",
+    "edit",
 ]
 
 
