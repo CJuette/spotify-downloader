@@ -97,20 +97,30 @@ class Playlist(SongList):
         if playlist_response is None:
             raise PlaylistError(f"Wrong playlist id: {url}")
 
-        # Collect all entries from paging
-        entries = list(playlist_response.get("items") or [])
-        while playlist_response.get("next"):
+         # Get all tracks from playlist
+        tracks = playlist_response["items"]
+        while playlist_response["next"]:
             playlist_response = spotify_client.next(playlist_response)
+
+            # Failed to get response, break the loop
             if playlist_response is None:
                 break
-            entries.extend(list(playlist_response.get("items") or []))
+
+            # Add tracks to the list
+            tracks.extend(playlist_response["items"])
+
 
         songs: List[Song] = []
         list_pos = 0
 
-        for entry in entries:
-            track_meta = _extract_track_meta(entry)
-            if not track_meta:
+        songs = []
+        for track_no, track in enumerate(tracks):
+            if not isinstance(track, dict):
+                continue
+
+            # Support both old API (track) and new API (item)
+            track_meta = track.get("track") or track.get("item")
+            if track_meta is None:
                 continue
 
             # Skip local tracks and unsupported types
