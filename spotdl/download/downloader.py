@@ -993,11 +993,6 @@ class Downloader:
                 display_progress_tracker.yt_dlp_progress_hook
             )
 
-            if song.download_url is None:
-                download_url = self.search(song)
-            else:
-                download_url = song.download_url
-
             logger.debug("Downloading %s using %s", song.display_name, download_url)
             download_info = audio_downloader.get_download_metadata(
                 download_url, download=True
