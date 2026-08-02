@@ -749,6 +749,7 @@ class Downloader:
             try:
                 song = await loop.run_in_executor(None, reinit_song, song)
                 reinitialized = True
+            except Exception as e:
                 logger.error("Error occurred while reinitializing song: %s", e)
                 self.errors.append(f"Error occurred while reinitializing song: {e}")
                 return song, None
