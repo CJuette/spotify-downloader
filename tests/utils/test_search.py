@@ -89,3 +89,15 @@ def test_create_empty_song():
 def test_get_simple_songs():
     songs = get_simple_songs(QUERY)
     assert len(songs) > 1
+
+
+def test_get_simple_songs_skips_missing_video_details(monkeypatch):
+    class FakeYTMClient:
+        def get_song(self, video_id):
+            return {"playabilityStatus": {"status": "ERROR"}}
+
+    monkeypatch.setattr("spotdl.utils.search.get_ytm_client", lambda: FakeYTMClient())
+
+    songs = get_simple_songs(["https://music.youtube.com/watch?v=dQw4w9WgXcQ"])
+
+    assert songs == []

@@ -175,6 +175,7 @@ def test_piped_uses_local_deno_yt_dlp_options(monkeypatch, tmp_path):
     Test Piped passes spotDL's local Deno options to yt-dlp.
     """
 
+    from spotdl.providers.audio import base
     from spotdl.providers.audio import piped
 
     captured_options = {}
@@ -183,10 +184,10 @@ def test_piped_uses_local_deno_yt_dlp_options(monkeypatch, tmp_path):
         captured_options.update(options)
         return object()
 
-    monkeypatch.setattr(piped, "YoutubeDL", mock_youtube_dl)
-    monkeypatch.setattr(piped, "get_temp_path", lambda *_: tmp_path)
+    monkeypatch.setattr(base, "YoutubeDL", mock_youtube_dl)
+    monkeypatch.setattr(base, "get_temp_path", lambda *_: tmp_path)
     monkeypatch.setattr(
-        piped,
+        base,
         "get_local_deno_yt_dlp_options",
         lambda *_: {"js_runtimes": {"deno": {"path": "local-deno"}}},
     )

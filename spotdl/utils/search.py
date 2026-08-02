@@ -174,15 +174,23 @@ def get_simple_songs(
         elif "music.youtube.com/watch?v" in request:
             track_data = get_ytm_client().get_song(request.split("?v=", 1)[1])
 
+            video_details = track_data.get("videoDetails")
+            if video_details is None:
+                logger.error(
+                    "Could not get metadata for YouTube Music link, skipping: %s",
+                    request,
+                )
+                continue
+
             yt_song = Song.from_search_term(
-                f"{track_data['videoDetails']['author']} - {track_data['videoDetails']['title']}"
+                f"{video_details['author']} - {video_details['title']}"
             )
 
             if use_ytm_data:
-                yt_song.name = track_data["title"]
-                yt_song.artist = track_data["author"]
-                yt_song.artists = [track_data["author"]]
-                yt_song.duration = track_data["lengthSeconds"]
+                yt_song.name = video_details["title"]
+                yt_song.artist = video_details["author"]
+                yt_song.artists = [video_details["author"]]
+                yt_song.duration = int(video_details["lengthSeconds"])
 
             yt_song.download_url = request
             songs.append(yt_song)

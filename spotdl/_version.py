@@ -2,4 +2,4 @@
 Version module for spotdl.
 """
 
-__version__ = "4.5.0+cj.extendedv2"
+__version__ = "4.5.2+cj.extendedv2"

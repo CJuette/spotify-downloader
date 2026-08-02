@@ -55,6 +55,12 @@ class YTDLLogger:
         YTDL uses this to print errors.
         """
 
+        # yt-dlp routes deprecation notices (e.g. old Python versions) through
+        # the error channel; they are not download failures
+        if "Deprecated Feature" in msg:
+            logger.debug(msg)
+            return
+
         raise AudioProviderError(msg)
 
 

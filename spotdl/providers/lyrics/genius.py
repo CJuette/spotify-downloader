@@ -52,7 +52,7 @@ class Genius(LyricsProvider):
         artists_str = ", ".join(artists)
         title = f"{name} - {artists_str}"
 
-        search_response = self.session.get(
+        search_resp = self.session.get(
             "https://api.genius.com/search",
             params={"q": title},
             headers=self.headers,
@@ -60,8 +60,20 @@ class Genius(LyricsProvider):
             proxies=GlobalConfig.get_parameter("proxies"),
         )
 
+        if not search_resp.ok:
+            raise RuntimeError(
+                f"Received HTTP {search_resp.status_code} from {search_resp.url}"
+            )
+
+        search_response = search_resp.json()
+
+        if "response" not in search_response:
+            raise RuntimeError(
+                search_response.get("meta", {}).get("message", "Unknown API error")
+            )
+
         results: Dict[str, str] = {}
-        for hit in search_response.json()["response"]["hits"]:
+        for hit in search_response["response"]["hits"]:
             results[hit["result"]["full_title"]] = hit["result"]["id"]
 
         return results
